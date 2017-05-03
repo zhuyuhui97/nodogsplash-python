@@ -4,6 +4,9 @@ import random,string
 import urllib3.request,subprocess,signal
 from fw_iptables import *
 from flags import *
+import plugin_manager
+
+global plugin_manager
 
 global arr
 arr=[]
@@ -18,8 +21,10 @@ class c_client:
         self.idx=idxcount
         idxcount=(idxcount+1)%maxclients
         arr.append(self)
+        plugin_manager.plug_handler.onevent('on_found_device',self)
 
     def do_auth(self):
+        plugin_manager.plug_handler.onevent('on_try_auth', self)
         if (self.fw_connection_state==AUTH_DEAUTHENTICATED):
             rc = 1
             print("[INFO]\t\tAuthenticating {} {}".format(self.ip, self.mac))
@@ -32,9 +37,11 @@ class c_client:
             rc |= iptables_do_command("-t mangle -A " + CHAIN_INCOMING + " -d {} -j ACCEPT", self.ip)
             if (rc == 1):
                 fw_connection_state = AUTH_AUTHENTICATED
+            plugin_manager.plug_handler.onevent('on_auth_succeed', self)
             return rc
         else:
             print('[ERROR]\t{} is authenticated, skipping.'.format(self.ip))
+            plugin_manager.plug_handler.onevent('on_auth_failed', self)
 
     def do_deauth(self):
         if (self.fw_connection_state == AUTH_AUTHENTICATED):
@@ -49,6 +56,7 @@ class c_client:
             rc |= iptables_do_command("-t mangle -D " + CHAIN_INCOMING + " -d {} -j ACCEPT", self.ip)
             if (rc == 1):
                 fw_connection_state = AUTH_DEAUTHENTICATED
+            plugin_manager.plug_handler.onevent('on_deauth', self)
             return rc
         else:
             print('[ERROR]\t{} is not authenticated, skipping.'.format(self.ip))
@@ -76,6 +84,7 @@ class c_client:
     #download_limit=0
     #upload_limit=0
     idx=0
+    online=1
 
 def find_by_ip(ip):
     global arr
